@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced To-Do List</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Advanced To-Do List</h1>
+        
+        <div class="time-sections">
+            <button class="section-btn active" data-section="today">Today</button>
+            <button class="section-btn" data-section="tomorrow">Tomorrow</button>
+            <button class="section-btn" data-section="week">This Week</button>
+            <button class="section-btn" data-section="month">This Month</button>
+            <button class="section-btn" data-section="year">This Year</button>
+        </div>
+        
+        <div class="task-input-container">
+            <input type="text" id="taskInput" placeholder="Add a new task...">
+            <div class="priority-selector">
+                <label>
+                    <input type="radio" name="priority" value="main" checked>
+                    <span class="priority-label main">Main</span>
+                </label>
+                <label>
+                    <input type="radio" name="priority" value="sub">
+                    <span class="priority-label sub">Sub</span>
+                </label>
+                <label>
+                    <input type="radio" name="priority" value="minor">
+                    <span class="priority-label minor">Minor</span>
+                </label>
+            </div>
+            <button id="addTaskBtn">Add Task</button>
+        </div>
+        
+        <div class="tasks-container">
+            <h2 id="currentSection">Today</h2>
+            <div id="tasksList"></div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
+
