@@ -57,6 +57,21 @@ document.addEventListener("DOMContentLoaded", () => {
         tasks.due = []
         localStorage.setItem("tasks", JSON.stringify(tasks))
       }
+
+      // Migrate existing tasks to support subtasks if needed
+      let needsMigration = false
+      Object.keys(tasks).forEach((section) => {
+        tasks[section].forEach((task) => {
+          if (!task.subtasks) {
+            task.subtasks = []
+            needsMigration = true
+          }
+        })
+      })
+
+      if (needsMigration) {
+        localStorage.setItem("tasks", JSON.stringify(tasks))
+      }
     }
 
     // Add due tasks button if it doesn't exist
@@ -111,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       completed: false,
       priority: selectedPriority,
       createdAt: new Date().toISOString(),
+      subtasks: [], // Initialize empty subtasks array
     })
 
     // Save tasks to localStorage
@@ -121,6 +137,85 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Render tasks
     renderTasks()
+  }
+
+  // Add a subtask to a task
+  function addSubtask(taskId, subtaskText) {
+    if (subtaskText.trim() === "") return
+
+    // Get tasks from localStorage
+    const tasks = JSON.parse(localStorage.getItem("tasks"))
+
+    // Find the task
+    const task = tasks[currentSection].find((t) => t.id === taskId)
+
+    if (task) {
+      // Add the subtask
+      task.subtasks.push({
+        id: Date.now().toString(),
+        text: subtaskText,
+        completed: false,
+      })
+
+      // Save tasks to localStorage
+      localStorage.setItem("tasks", JSON.stringify(tasks))
+
+      // Render tasks
+      renderTasks()
+    }
+  }
+
+  // Toggle subtask completion
+  function toggleSubtaskCompletion(taskId, subtaskId) {
+    // Get tasks from localStorage
+    const tasks = JSON.parse(localStorage.getItem("tasks"))
+
+    // Find the task
+    const task = tasks[currentSection].find((t) => t.id === taskId)
+
+    if (task) {
+      // Find the subtask
+      const subtask = task.subtasks.find((st) => st.id === subtaskId)
+
+      if (subtask) {
+        // Toggle completion
+        subtask.completed = !subtask.completed
+
+        // Check if all subtasks are completed
+        const allSubtasksCompleted = task.subtasks.length > 0 && task.subtasks.every((st) => st.completed)
+
+        // Update task completion based on subtasks if there are any
+        if (task.subtasks.length > 0) {
+          task.completed = allSubtasksCompleted
+        }
+
+        // Save tasks to localStorage
+        localStorage.setItem("tasks", JSON.stringify(tasks))
+
+        // Render tasks
+        renderTasks()
+      }
+    }
+  }
+
+  // Delete a subtask
+  function deleteSubtask(taskId, subtaskId) {
+    // Get tasks from localStorage
+    const tasks = JSON.parse(localStorage.getItem("tasks"))
+
+    // Find the task
+    const task = tasks[currentSection].find((t) => t.id === taskId)
+
+    if (task) {
+      // Remove the subtask
+      task.subtasks = task.subtasks.filter((st) => st.id !== subtaskId)
+
+      // Save tasks to localStorage
+      localStorage.setItem("tasks", JSON.stringify(tasks))
+
+      // Render tasks
+      renderTasks()
+    }
   }
 
   // Render tasks for the current section
@@ -150,11 +245,44 @@ document.addEventListener("DOMContentLoaded", () => {
         taskItem.classList.add("completed")
       }
 
+      // Calculate subtask progress
+      let subtaskProgress = ""
+      if (task.subtasks && task.subtasks.length > 0) {
+        const completedSubtasks = task.subtasks.filter((st) => st.completed).length
+        subtaskProgress = `<span class="subtask-progress">${completedSubtasks}/${task.subtasks.length}</span>`
+      }
+
       taskItem.innerHTML = `
-                <input type="checkbox" class="task-checkbox" ${task.completed ? "checked" : ""}>
-                <span class="task-text">${task.text}</span>
-                <button class="task-delete">❌</button>
-            `
+        <div class="task-main">
+          <input type="checkbox" class="task-checkbox" ${task.completed ? "checked" : ""}>
+          <span class="task-text">${task.text}</span>
+          ${subtaskProgress}
+          <div class="task-actions">
+            <button class="task-add-subtask" title="Add Subtask">+</button>
+            <button class="task-toggle-subtasks" title="Toggle Subtasks">▼</button>
+            <button class="task-delete" title="Delete Task">❌</button>
+          </div>
+        </div>
+        <div class="subtasks-container" style="display: none;">
+          <div class="subtasks-list">
+            ${task.subtasks
+              .map(
+                (subtask) => `
+              <div class="subtask-item ${subtask.completed ? "completed" : ""}">
+                <input type="checkbox" class="subtask-checkbox" data-subtask-id="${subtask.id}" ${subtask.completed ? "checked" : ""}>
+                <span class="subtask-text">${subtask.text}</span>
+                <button class="subtask-delete" data-subtask-id="${subtask.id}">❌</button>
+              </div>
+            `,
+              )
+              .join("")}
+          </div>
+          <div class="add-subtask-container">
+            <input type="text" class="add-subtask-input" placeholder="Add a subtask...">
+            <button class="add-subtask-btn">Add</button>
+          </div>
+        </div>
+      `
 
       // Add event listeners for task actions
       const checkbox = taskItem.querySelector(".task-checkbox")
@@ -165,6 +293,54 @@ document.addEventListener("DOMContentLoaded", () => {
       const deleteBtn = taskItem.querySelector(".task-delete")
       deleteBtn.addEventListener("click", () => {
         deleteTask(task.id)
+      })
+
+      // Add subtask toggle functionality
+      const toggleSubtasksBtn = taskItem.querySelector(".task-toggle-subtasks")
+      const subtasksContainer = taskItem.querySelector(".subtasks-container")
+      toggleSubtasksBtn.addEventListener("click", () => {
+        const isHidden = subtasksContainer.style.display === "none"
+        subtasksContainer.style.display = isHidden ? "block" : "none"
+        toggleSubtasksBtn.textContent = isHidden ? "▲" : "▼"
+      })
+
+      // Add subtask button functionality
+      const addSubtaskBtn = taskItem.querySelector(".task-add-subtask")
+      addSubtaskBtn.addEventListener("click", () => {
+        subtasksContainer.style.display = "block"
+        toggleSubtasksBtn.textContent = "▲"
+        taskItem.querySelector(".add-subtask-input").focus()
+      })
+
+      // Add subtask input functionality
+      const addSubtaskInput = taskItem.querySelector(".add-subtask-input")
+      const addSubtaskButton = taskItem.querySelector(".add-subtask-btn")
+
+      addSubtaskButton.addEventListener("click", () => {
+        addSubtask(task.id, addSubtaskInput.value)
+        addSubtaskInput.value = ""
+      })
+
+      addSubtaskInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          addSubtask(task.id, addSubtaskInput.value)
+          addSubtaskInput.value = ""
+        }
+      })
+
+      // Add event listeners for subtask actions
+      const subtaskCheckboxes = taskItem.querySelectorAll(".subtask-checkbox")
+      subtaskCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          toggleSubtaskCompletion(task.id, checkbox.dataset.subtaskId)
+        })
+      })
+
+      const subtaskDeleteBtns = taskItem.querySelectorAll(".subtask-delete")
+      subtaskDeleteBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          deleteSubtask(task.id, btn.dataset.subtaskId)
+        })
       })
 
       tasksList.appendChild(taskItem)
@@ -180,6 +356,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const task = tasks[currentSection].find((task) => task.id === taskId)
     if (task) {
       task.completed = !task.completed
+
+      // If task is marked as completed, mark all subtasks as completed too
+      if (task.completed && task.subtasks) {
+        task.subtasks.forEach((subtask) => {
+          subtask.completed = true
+        })
+      }
 
       // Save tasks to localStorage
       localStorage.setItem("tasks", JSON.stringify(tasks))
