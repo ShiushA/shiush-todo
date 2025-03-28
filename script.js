@@ -175,6 +175,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const subtask = task.subtasks.find((st) => st.id === subtaskId)
 
       if (subtask) {
+        // Store the open states of all subtask containers before updating
+        const openStates = {}
+        document.querySelectorAll(".task-item").forEach((item) => {
+          const taskId = item.querySelector(".task-checkbox").dataset.taskId
+          const subtasksContainer = item.querySelector(".subtasks-container")
+          if (subtasksContainer) {
+            openStates[taskId] = subtasksContainer.style.display === "block"
+          }
+        })
+
         // Toggle completion
         subtask.completed = !subtask.completed
 
@@ -191,6 +201,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Render tasks
         renderTasks()
+
+        // Restore open states after rendering
+        document.querySelectorAll(".task-item").forEach((item) => {
+          const taskId = item.querySelector(".task-checkbox").dataset.taskId
+          if (openStates[taskId]) {
+            const subtasksContainer = item.querySelector(".subtasks-container")
+            const toggleButton = item.querySelector(".task-toggle-subtasks")
+            if (subtasksContainer && toggleButton) {
+              subtasksContainer.style.display = "block"
+              toggleButton.textContent = "▲"
+            }
+          }
+        })
       }
     }
   }
@@ -249,7 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       taskItem.innerHTML = `
         <div class="task-main">
-          <input type="checkbox" class="task-checkbox" ${task.completed ? "checked" : ""}>
+          <input type="checkbox" class="task-checkbox" data-task-id="${task.id}" ${task.completed ? "checked" : ""}>
           <span class="task-text">${task.text}</span>
           ${subtaskProgress}
           <div class="task-actions">
