@@ -382,6 +382,14 @@ document.addEventListener("DOMContentLoaded", () => {
         })
       }
 
+      // Add completedAt timestamp if the task is marked as completed
+      if (task.completed) {
+        task.completedAt = new Date().toISOString();
+      } else {
+        // Remove completedAt timestamp if the task is marked as incomplete
+        delete task.completedAt;
+      }
+
       // Save tasks to localStorage
       localStorage.setItem("tasks", JSON.stringify(tasksCache))
 
@@ -429,6 +437,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (daysPassed >= 1) {
       console.log("At least one day has passed, processing daily tasks")
       processDailyTasks(daysPassed)
+      
+      // Delete completed tasks in due section if a day has passed
+      deleteCompletedDueTasks()
     }
 
     // Check if we've crossed a Monday since last opened (for weekly tasks)
@@ -452,6 +463,46 @@ document.addEventListener("DOMContentLoaded", () => {
     // Update the last opened timestamp
     localStorage.setItem("lastOpenedTimestamp", currentTimestamp.toString())
     console.log("Updated last opened timestamp to:", new Date(currentTimestamp).toLocaleString())
+  }
+
+  // Delete completed tasks in the due section if they were completed at least a day ago
+  function deleteCompletedDueTasks() {
+    console.log("Checking for completed due tasks to delete")
+    
+    const now = new Date()
+    const oneDayInMs = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+    
+    // Filter out completed tasks that were completed at least a day ago
+    const tasksToKeep = tasksCache.due.filter(task => {
+      // Keep all incomplete tasks
+      if (!task.completed) return true
+      
+      // If task is completed but doesn't have completedAt timestamp, keep it
+      if (!task.completedAt) return true
+      
+      // Calculate time difference between now and when the task was completed
+      const completedAt = new Date(task.completedAt)
+      const timeDiff = now.getTime() - completedAt.getTime()
+      
+      // Keep the task if it was completed less than a day ago
+      return timeDiff < oneDayInMs
+    })
+    
+    // If we removed any tasks, update the cache and localStorage
+    if (tasksToKeep.length < tasksCache.due.length) {
+      const removedCount = tasksCache.due.length - tasksToKeep.length
+      console.log(`Removed ${removedCount} completed due tasks that were completed more than a day ago`)
+      
+      tasksCache.due = tasksToKeep
+      localStorage.setItem("tasks", JSON.stringify(tasksCache))
+      
+      // Re-render if we're currently viewing the due section
+      if (currentSection === "due") {
+        renderTasks()
+      }
+    } else {
+      console.log("No completed due tasks to delete")
+    }
   }
 
   // Process daily tasks based on days passed
@@ -604,4 +655,3 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 })
-
