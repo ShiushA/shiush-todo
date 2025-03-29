@@ -436,27 +436,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (daysPassed >= 1) {
       console.log("At least one day has passed, processing daily tasks")
-      processDailyTasks(daysPassed)
       
-      // Delete completed tasks in due section if a day has passed
-      deleteCompletedDueTasks()
+      // First delete completed tasks from all daily sections
+      deleteCompletedTasks("due", "daily")
+      deleteCompletedTasks("tomorrow", "daily")
+      deleteCompletedTasks("today", "daily")
+      
+      // Then process daily tasks (moving tomorrow to today, etc.)
+      processDailyTasks(daysPassed)
     }
 
     // Check if we've crossed a Monday since last opened (for weekly tasks)
     if (hasCrossedMonday(lastOpened, now)) {
       console.log("Crossed a Monday since last opened, processing weekly tasks")
+      
+      // First delete completed tasks from week section
+      deleteCompletedTasks("week", "weekly")
+      
+      // Then move incomplete tasks from week to due
       moveIncompleteTasks("week")
     }
 
     // Check if we've crossed a month end since last opened (for monthly tasks)
     if (hasCrossedMonthEnd(lastOpened, now)) {
       console.log("Crossed a month end since last opened, processing monthly tasks")
+      
+      // First delete completed tasks from month section
+      deleteCompletedTasks("month", "monthly")
+      
+      // Then move incomplete tasks from month to due
       moveIncompleteTasks("month")
     }
 
     // Check if we've crossed a year end since last opened (for yearly tasks)
     if (hasCrossedYearEnd(lastOpened, now)) {
       console.log("Crossed a year end since last opened, processing yearly tasks")
+      
+      // First delete completed tasks from year section
+      deleteCompletedTasks("year", "yearly")
+      
+      // Then move incomplete tasks from year to due
       moveIncompleteTasks("year")
     }
 
@@ -465,15 +484,38 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Updated last opened timestamp to:", new Date(currentTimestamp).toLocaleString())
   }
 
-  // Delete completed tasks in the due section if they were completed at least a day ago
-  function deleteCompletedDueTasks() {
-    console.log("Checking for completed due tasks to delete")
+  // Delete completed tasks based on the section and time period
+  function deleteCompletedTasks(section, timePeriod) {
+    console.log(`Checking for completed ${section} tasks to delete (${timePeriod} cleanup)`)
     
     const now = new Date()
-    const oneDayInMs = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+    let timeThreshold
     
-    // Filter out completed tasks that were completed at least a day ago
-    const tasksToKeep = tasksCache.due.filter(task => {
+    // Set the appropriate time threshold based on the time period
+    switch (timePeriod) {
+      case "daily":
+        // For daily cleanup, delete tasks completed more than 24 hours ago
+        timeThreshold = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+        break
+      case "weekly":
+        // For weekly cleanup, delete tasks completed more than 7 days ago
+        timeThreshold = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+        break
+      case "monthly":
+        // For monthly cleanup, delete tasks completed more than 30 days ago
+        timeThreshold = 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
+        break
+      case "yearly":
+        // For yearly cleanup, delete tasks completed more than 365 days ago
+        timeThreshold = 365 * 24 * 60 * 60 * 1000 // 365 days in milliseconds
+        break
+      default:
+        // Default to daily cleanup
+        timeThreshold = 24 * 60 * 60 * 1000
+    }
+    
+    // Filter out completed tasks based on the time threshold
+    const tasksToKeep = tasksCache[section].filter(task => {
       // Keep all incomplete tasks
       if (!task.completed) return true
       
@@ -484,24 +526,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const completedAt = new Date(task.completedAt)
       const timeDiff = now.getTime() - completedAt.getTime()
       
-      // Keep the task if it was completed less than a day ago
-      return timeDiff < oneDayInMs
+      // Keep the task if it was completed less than the threshold time ago
+      return timeDiff < timeThreshold
     })
     
     // If we removed any tasks, update the cache and localStorage
-    if (tasksToKeep.length < tasksCache.due.length) {
-      const removedCount = tasksCache.due.length - tasksToKeep.length
-      console.log(`Removed ${removedCount} completed due tasks that were completed more than a day ago`)
+    if (tasksToKeep.length < tasksCache[section].length) {
+      const removedCount = tasksCache[section].length - tasksToKeep.length
+      console.log(`Removed ${removedCount} completed ${section} tasks (${timePeriod} cleanup)`)
       
-      tasksCache.due = tasksToKeep
+      tasksCache[section] = tasksToKeep
       localStorage.setItem("tasks", JSON.stringify(tasksCache))
       
-      // Re-render if we're currently viewing the due section
-      if (currentSection === "due") {
+      // Re-render if we're currently viewing the affected section
+      if (currentSection === section) {
         renderTasks()
       }
     } else {
-      console.log("No completed due tasks to delete")
+      console.log(`No completed ${section} tasks to delete (${timePeriod} cleanup)`)
     }
   }
 
