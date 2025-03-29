@@ -1,699 +1,439 @@
-// Initialize the app when the DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
-  // DOM elements
-  const sectionButtons = document.querySelectorAll(".section-btn")
-  const taskInput = document.getElementById("taskInput")
-  const addTaskBtn = document.getElementById("addTaskBtn")
-  const tasksList = document.getElementById("tasksList")
-  const currentSectionTitle = document.getElementById("currentSection")
-
-  // Current active section
+  // DOM elements and state
+  const elements = {
+    sectionButtons: document.querySelectorAll(".section-btn"),
+    taskInput: document.getElementById("taskInput"),
+    addTaskBtn: document.getElementById("addTaskBtn"),
+    tasksList: document.getElementById("tasksList"),
+    currentSectionTitle: document.getElementById("currentSection")
+  }
+  
   let currentSection = "today"
-
-  // Cache for tasks to reduce localStorage reads
   let tasksCache = null
 
-  // Initialize the app
-  init()
-
-  // Add event listeners
-  sectionButtons.forEach((button) => {
+  // Initialize app
+  initializeApp()
+  
+  // Event listeners for section buttons
+  elements.sectionButtons.forEach(button => {
     button.addEventListener("click", () => {
-      // Update active section
-      sectionButtons.forEach((btn) => btn.classList.remove("active"))
+      elements.sectionButtons.forEach(btn => btn.classList.remove("active"))
       button.classList.add("active")
-
-      // Update current section
       currentSection = button.dataset.section
-      currentSectionTitle.textContent = button.textContent
-
-      // Render tasks for the selected section
+      elements.currentSectionTitle.textContent = button.textContent
       renderTasks()
     })
   })
 
-  addTaskBtn.addEventListener("click", addTask)
-  taskInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      addTask()
-    }
-  })
+  // Event listeners for adding tasks
+  elements.addTaskBtn.addEventListener("click", addTask)
+  elements.taskInput.addEventListener("keypress", e => { if (e.key === "Enter") addTask() })
 
-  // Initialize the app
-  function init() {
-    // Load tasks from localStorage
+  // ===== Core Functions =====
+
+  function initializeApp() {
+    // Load or initialize tasks
     if (!localStorage.getItem("tasks")) {
-      // Initialize with empty tasks for each section
-      const initialTasks = {
-        today: [],
-        tomorrow: [],
-        week: [],
-        month: [],
-        year: [],
-        due: [], // Add due tasks section
-      }
-      localStorage.setItem("tasks", JSON.stringify(initialTasks))
-      tasksCache = initialTasks
+      tasksCache = { today: [], tomorrow: [], week: [], month: [], year: [], due: [] }
+      localStorage.setItem("tasks", JSON.stringify(tasksCache))
     } else {
-      // Load tasks into cache
       tasksCache = JSON.parse(localStorage.getItem("tasks"))
-
-      // Make sure the due section exists in existing data
-      if (!tasksCache.due) {
-        tasksCache.due = []
-        localStorage.setItem("tasks", JSON.stringify(tasksCache))
-      }
-
-      // Migrate existing tasks to support subtasks if needed
+      
+      // Ensure due section exists
+      if (!tasksCache.due) tasksCache.due = []
+      
+      // Migrate tasks to support subtasks if needed
       let needsMigration = false
-      Object.keys(tasksCache).forEach((section) => {
-        tasksCache[section].forEach((task) => {
+      Object.keys(tasksCache).forEach(section => {
+        tasksCache[section].forEach(task => {
           if (!task.subtasks) {
             task.subtasks = []
             needsMigration = true
           }
         })
       })
-
-      if (needsMigration) {
-        localStorage.setItem("tasks", JSON.stringify(tasksCache))
-      }
+      if (needsMigration) localStorage.setItem("tasks", JSON.stringify(tasksCache))
     }
 
-    // Add due tasks button if it doesn't exist
-    if (!document.querySelector('[data-section="due"]')) {
-      const timeSections = document.querySelector(".time-sections")
-      const dueButton = document.createElement("button")
-      dueButton.classList.add("section-btn")
-      dueButton.dataset.section = "due"
-      dueButton.textContent = "Due Tasks"
-      timeSections.appendChild(dueButton)
-
-      // Add event listener to the new button
-      dueButton.addEventListener("click", () => {
-        sectionButtons.forEach((btn) => btn.classList.remove("active"))
-        dueButton.classList.add("active")
-        currentSection = "due"
-        currentSectionTitle.textContent = "Due Tasks"
-        renderTasks()
-      })
-    }
-
-    // Check for missed task movements based on last opened time
+    // Check for missed task movements
     checkMissedTaskMovements()
-
-    // Render tasks for the current section
     renderTasks()
   }
 
-  // Add a new task
   function addTask() {
-    const taskText = taskInput.value.trim()
+    const taskText = elements.taskInput.value.trim()
     if (taskText === "") return
 
     // Get selected priority
-    const priorityRadios = document.getElementsByName("priority")
-    let selectedPriority
+    let selectedPriority = "main"
+    document.getElementsByName("priority").forEach(radio => {
+      if (radio.checked) selectedPriority = radio.value
+    })
 
-    for (const radio of priorityRadios) {
-      if (radio.checked) {
-        selectedPriority = radio.value
-        break
-      }
-    }
-
-    // Add new task to the current section
+    // Add new task
     tasksCache[currentSection].push({
       id: Date.now().toString(),
       text: taskText,
       completed: false,
       priority: selectedPriority,
       createdAt: new Date().toISOString(),
-      subtasks: [], // Initialize empty subtasks array
+      subtasks: []
     })
 
-    // Save tasks to localStorage
-    localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-    // Clear input
-    taskInput.value = ""
-
-    // Render tasks
+    saveToLocalStorage()
+    elements.taskInput.value = ""
     renderTasks()
   }
 
-  // Add a subtask to a task
-  function addSubtask(taskId, subtaskText) {
-    if (subtaskText.trim() === "") return
-
-    // Find the task
-    const task = tasksCache[currentSection].find((t) => t.id === taskId)
-
-    if (task) {
-      // Add the subtask
-      task.subtasks.push({
-        id: Date.now().toString(),
-        text: subtaskText,
-        completed: false,
-      })
-
-      // Save tasks to localStorage
-      localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-      // Render tasks
-      renderTasks()
-    }
-  }
-
-  // Toggle subtask completion
-  function toggleSubtaskCompletion(taskId, subtaskId) {
-    // Find the task
-    const task = tasksCache[currentSection].find((t) => t.id === taskId)
-
-    if (task) {
-      // Find the subtask
-      const subtask = task.subtasks.find((st) => st.id === subtaskId)
-
-      if (subtask) {
-        // Store the open states of all subtask containers before updating
-        const openStates = {}
-        document.querySelectorAll(".task-item").forEach((item) => {
-          const taskId = item.querySelector(".task-checkbox").dataset.taskId
-          const subtasksContainer = item.querySelector(".subtasks-container")
-          if (subtasksContainer) {
-            openStates[taskId] = subtasksContainer.style.display === "block"
-          }
-        })
-
-        // Toggle completion
-        subtask.completed = !subtask.completed
-
-        // Check if all subtasks are completed
-        const allSubtasksCompleted = task.subtasks.length > 0 && task.subtasks.every((st) => st.completed)
-
-        // Update task completion based on subtasks if there are any
-        if (task.subtasks.length > 0) {
-          task.completed = allSubtasksCompleted
-        }
-
-        // Save tasks to localStorage
-        localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-        // Render tasks
-        renderTasks()
-
-        // Restore open states after rendering
-        document.querySelectorAll(".task-item").forEach((item) => {
-          const taskId = item.querySelector(".task-checkbox").dataset.taskId
-          if (openStates[taskId]) {
-            const subtasksContainer = item.querySelector(".subtasks-container")
-            const toggleButton = item.querySelector(".task-toggle-subtasks")
-            if (subtasksContainer && toggleButton) {
-              subtasksContainer.style.display = "block"
-              toggleButton.textContent = "▲"
-            }
-          }
-        })
-      }
-    }
-  }
-
-  // Delete a subtask
-  function deleteSubtask(taskId, subtaskId) {
-    // Find the task
-    const task = tasksCache[currentSection].find((task) => task.id === taskId)
-
-    if (task) {
-      // Remove the subtask
-      task.subtasks = task.subtasks.filter((st) => st.id !== subtaskId)
-
-      // Save tasks to localStorage
-      localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-      // Render tasks
-      renderTasks()
-    }
-  }
-
-  // Render tasks for the current section - Optimized
   function renderTasks() {
     const sectionTasks = tasksCache[currentSection]
-
-    // Sort tasks: incomplete first, then by priority (main > sub > minor)
+    
+    // Sort tasks: incomplete first, then by priority
     sectionTasks.sort((a, b) => {
-      if (a.completed !== b.completed) {
-        return a.completed ? 1 : -1
-      }
-
+      if (a.completed !== b.completed) return a.completed ? 1 : -1
       const priorityOrder = { main: 0, sub: 1, minor: 2 }
       return priorityOrder[a.priority] - priorityOrder[b.priority]
     })
 
-    // Clear tasks list
-    tasksList.innerHTML = ""
-
-    // Create document fragment for better performance
+    elements.tasksList.innerHTML = ""
     const fragment = document.createDocumentFragment()
 
-    // Render tasks
-    sectionTasks.forEach((task) => {
-      const taskItem = document.createElement("div")
-      taskItem.classList.add("task-item", `task-priority-${task.priority}`)
-      if (task.completed) {
-        taskItem.classList.add("completed")
-      }
-
-      // Calculate subtask progress
-      let subtaskProgress = ""
-      if (task.subtasks && task.subtasks.length > 0) {
-        const completedSubtasks = task.subtasks.filter((st) => st.completed).length
-        subtaskProgress = `<span class="subtask-progress">${completedSubtasks}/${task.subtasks.length}</span>`
-      }
-
-      taskItem.innerHTML = `
-        <div class="task-main">
-          <input type="checkbox" class="task-checkbox" data-task-id="${task.id}" ${task.completed ? "checked" : ""}>
-          <span class="task-text">${task.text}</span>
-          ${subtaskProgress}
-          <div class="task-actions">
-            <button class="task-add-subtask" title="Add Subtask">+</button>
-            <button class="task-toggle-subtasks" title="Toggle Subtasks">▼</button>
-            <button class="task-delete" title="Delete Task">❌</button>
-          </div>
-        </div>
-        <div class="subtasks-container" style="display: none;">
-          <div class="subtasks-list">
-            ${task.subtasks
-              .map(
-                (subtask) => `
-              <div class="subtask-item ${subtask.completed ? "completed" : ""}">
-                <input type="checkbox" class="subtask-checkbox" data-subtask-id="${subtask.id}" ${subtask.completed ? "checked" : ""}>
-                <span class="subtask-text">${subtask.text}</span>
-                <button class="subtask-delete" data-subtask-id="${subtask.id}">❌</button>
-              </div>
-            `,
-              )
-              .join("")}
-          </div>
-          <div class="add-subtask-container">
-            <input type="text" class="add-subtask-input" placeholder="Add a subtask...">
-            <button class="add-subtask-btn">Add</button>
-          </div>
-        </div>
-      `
-
-      // Add event listeners for task actions
-      const checkbox = taskItem.querySelector(".task-checkbox")
-      checkbox.addEventListener("change", () => {
-        toggleTaskCompletion(task.id)
-      })
-
-      const deleteBtn = taskItem.querySelector(".task-delete")
-      deleteBtn.addEventListener("click", () => {
-        deleteTask(task.id)
-      })
-
-      // Add subtask toggle functionality
-      const toggleSubtasksBtn = taskItem.querySelector(".task-toggle-subtasks")
-      const subtasksContainer = taskItem.querySelector(".subtasks-container")
-      toggleSubtasksBtn.addEventListener("click", () => {
-        const isHidden = subtasksContainer.style.display === "none"
-        subtasksContainer.style.display = isHidden ? "block" : "none"
-        toggleSubtasksBtn.textContent = isHidden ? "▲" : "▼"
-      })
-
-      // Add subtask button functionality
-      const addSubtaskBtn = taskItem.querySelector(".task-add-subtask")
-      addSubtaskBtn.addEventListener("click", () => {
-        subtasksContainer.style.display = "block"
-        toggleSubtasksBtn.textContent = "▲"
-        taskItem.querySelector(".add-subtask-input").focus()
-      })
-
-      // Add subtask input functionality
-      const addSubtaskInput = taskItem.querySelector(".add-subtask-input")
-      const addSubtaskButton = taskItem.querySelector(".add-subtask-btn")
-
-      addSubtaskButton.addEventListener("click", () => {
-        addSubtask(task.id, addSubtaskInput.value)
-        addSubtaskInput.value = ""
-      })
-
-      addSubtaskInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-          addSubtask(task.id, addSubtaskInput.value)
-          addSubtaskInput.value = ""
-        }
-      })
-
-      // Add event listeners for subtask actions
-      const subtaskCheckboxes = taskItem.querySelectorAll(".subtask-checkbox")
-      subtaskCheckboxes.forEach((checkbox) => {
-        checkbox.addEventListener("change", () => {
-          toggleSubtaskCompletion(task.id, checkbox.dataset.subtaskId)
-        })
-      })
-
-      const subtaskDeleteBtns = taskItem.querySelectorAll(".subtask-delete")
-      subtaskDeleteBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          deleteSubtask(task.id, btn.dataset.subtaskId)
-        })
-      })
-
+    sectionTasks.forEach(task => {
+      const taskItem = createTaskElement(task)
       fragment.appendChild(taskItem)
     })
 
-    // Append all tasks at once for better performance
-    tasksList.appendChild(fragment)
+    elements.tasksList.appendChild(fragment)
   }
 
-  // Toggle task completion
-  function toggleTaskCompletion(taskId) {
-    // Find the task and toggle its completion status
-    const task = tasksCache[currentSection].find((task) => task.id === taskId)
-    if (task) {
-      task.completed = !task.completed
+  function createTaskElement(task) {
+    const taskItem = document.createElement("div")
+    taskItem.classList.add("task-item", `task-priority-${task.priority}`)
+    if (task.completed) taskItem.classList.add("completed")
 
-      // If task is marked as completed, mark all subtasks as completed too
-      if (task.completed && task.subtasks) {
-        task.subtasks.forEach((subtask) => {
-          subtask.completed = true
-        })
-      }
-
-      // Add completedAt timestamp if the task is marked as completed
-      if (task.completed) {
-        task.completedAt = new Date().toISOString();
-      } else {
-        // Remove completedAt timestamp if the task is marked as incomplete
-        delete task.completedAt;
-      }
-
-      // Save tasks to localStorage
-      localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-      // Render tasks
-      renderTasks()
+    // Calculate subtask progress
+    let subtaskProgress = ""
+    if (task.subtasks && task.subtasks.length > 0) {
+      const completedSubtasks = task.subtasks.filter(st => st.completed).length
+      subtaskProgress = `<span class="subtask-progress">${completedSubtasks}/${task.subtasks.length}</span>`
     }
+
+    taskItem.innerHTML = `
+      <div class="task-main">
+        <input type="checkbox" class="task-checkbox" data-task-id="${task.id}" ${task.completed ? "checked" : ""}>
+        <span class="task-text">${task.text}</span>
+        ${subtaskProgress}
+        <div class="task-actions">
+          <button class="task-add-subtask" title="Add Subtask">+</button>
+          <button class="task-toggle-subtasks" title="Toggle Subtasks">▼</button>
+          <button class="task-delete" title="Delete Task">❌</button>
+        </div>
+      </div>
+      <div class="subtasks-container" style="display: none;">
+        <div class="subtasks-list">
+          ${task.subtasks.map(subtask => `
+            <div class="subtask-item ${subtask.completed ? "completed" : ""}">
+              <input type="checkbox" class="subtask-checkbox" data-subtask-id="${subtask.id}" ${subtask.completed ? "checked" : ""}>
+              <span class="subtask-text">${subtask.text}</span>
+              <button class="subtask-delete" data-subtask-id="${subtask.id}">❌</button>
+            </div>
+          `).join("")}
+        </div>
+        <div class="add-subtask-container">
+          <input type="text" class="add-subtask-input" placeholder="Add a subtask...">
+          <button class="add-subtask-btn">Add</button>
+        </div>
+      </div>
+    `
+
+    // Add event listeners
+    addTaskEventListeners(taskItem, task.id)
+    return taskItem
   }
 
-  // Delete a task
-  function deleteTask(taskId) {
-    // Remove the task
-    tasksCache[currentSection] = tasksCache[currentSection].filter((task) => task.id !== taskId)
+  function addTaskEventListeners(taskItem, taskId) {
+    // Task checkbox
+    taskItem.querySelector(".task-checkbox").addEventListener("change", () => {
+      toggleTaskCompletion(taskId)
+    })
 
-    // Save tasks to localStorage
-    localStorage.setItem("tasks", JSON.stringify(tasksCache))
+    // Delete button
+    taskItem.querySelector(".task-delete").addEventListener("click", () => {
+      deleteTask(taskId)
+    })
 
-    // Render tasks
+    // Subtask toggle button
+    const toggleBtn = taskItem.querySelector(".task-toggle-subtasks")
+    const container = taskItem.querySelector(".subtasks-container")
+    toggleBtn.addEventListener("click", () => {
+      const isHidden = container.style.display === "none"
+      container.style.display = isHidden ? "block" : "none"
+      toggleBtn.textContent = isHidden ? "▲" : "▼"
+    })
+
+    // Add subtask button
+    taskItem.querySelector(".task-add-subtask").addEventListener("click", () => {
+      container.style.display = "block"
+      toggleBtn.textContent = "▲"
+      taskItem.querySelector(".add-subtask-input").focus()
+    })
+
+    // Add subtask input and button
+    const input = taskItem.querySelector(".add-subtask-input")
+    const addBtn = taskItem.querySelector(".add-subtask-btn")
+    
+    addBtn.addEventListener("click", () => {
+      addSubtask(taskId, input.value)
+      input.value = ""
+    })
+
+    input.addEventListener("keypress", e => {
+      if (e.key === "Enter") {
+        addSubtask(taskId, input.value)
+        input.value = ""
+      }
+    })
+
+    // Subtask checkboxes
+    taskItem.querySelectorAll(".subtask-checkbox").forEach(checkbox => {
+      checkbox.addEventListener("change", () => {
+        toggleSubtaskCompletion(taskId, checkbox.dataset.subtaskId)
+      })
+    })
+
+    // Subtask delete buttons
+    taskItem.querySelectorAll(".subtask-delete").forEach(btn => {
+      btn.addEventListener("click", () => {
+        deleteSubtask(taskId, btn.dataset.subtaskId)
+      })
+    })
+  }
+
+  // ===== Task Operations =====
+
+  function toggleTaskCompletion(taskId) {
+    const task = findTaskById(taskId)
+    if (!task) return
+    
+    task.completed = !task.completed
+    
+    // Update subtasks and completion timestamp
+    if (task.completed) {
+      task.subtasks.forEach(subtask => { subtask.completed = true })
+      task.completedAt = new Date().toISOString()
+    } else {
+      delete task.completedAt
+    }
+    
+    saveToLocalStorage()
     renderTasks()
   }
 
-  // Check for missed task movements based on last opened time
-  function checkMissedTaskMovements() {
-    const now = new Date()
-    const currentTimestamp = now.getTime()
-
-    // Get the last opened timestamp from localStorage
-    const lastOpenedTimestamp = localStorage.getItem("lastOpenedTimestamp")
-
-    // If this is the first time opening the app, just save the current timestamp and return
-    if (!lastOpenedTimestamp) {
-      localStorage.setItem("lastOpenedTimestamp", currentTimestamp.toString())
-      console.log("First time opening app, setting initial timestamp:", new Date(currentTimestamp).toLocaleString())
-      return
-    }
-
-    // Parse the last opened timestamp
-    const lastOpened = new Date(Number.parseInt(lastOpenedTimestamp))
-    console.log("Last opened:", lastOpened.toLocaleString())
-    console.log("Current time:", now.toLocaleString())
-
-    // Check if days have passed (for today/tomorrow tasks)
-    const daysPassed = getDaysBetweenDates(lastOpened, now)
-    console.log("Days passed since last opened:", daysPassed)
-
-    if (daysPassed >= 1) {
-      console.log("At least one day has passed, processing daily tasks")
-      
-      // First delete completed tasks from all daily sections
-      deleteCompletedTasks("due", "daily")
-      deleteCompletedTasks("tomorrow", "daily")
-      deleteCompletedTasks("today", "daily")
-      
-      // Then process daily tasks (moving tomorrow to today, etc.)
-      processDailyTasks(daysPassed)
-    }
-
-    // Check if we've crossed a Monday since last opened (for weekly tasks)
-    if (hasCrossedMonday(lastOpened, now)) {
-      console.log("Crossed a Monday since last opened, processing weekly tasks")
-      
-      // First delete completed tasks from week section
-      deleteCompletedTasks("week", "weekly")
-      
-      // Then move incomplete tasks from week to due
-      moveIncompleteTasks("week")
-    }
-
-    // Check if we've crossed a month end since last opened (for monthly tasks)
-    if (hasCrossedMonthEnd(lastOpened, now)) {
-      console.log("Crossed a month end since last opened, processing monthly tasks")
-      
-      // First delete completed tasks from month section
-      deleteCompletedTasks("month", "monthly")
-      
-      // Then move incomplete tasks from month to due
-      moveIncompleteTasks("month")
-    }
-
-    // Check if we've crossed a year end since last opened (for yearly tasks)
-    if (hasCrossedYearEnd(lastOpened, now)) {
-      console.log("Crossed a year end since last opened, processing yearly tasks")
-      
-      // First delete completed tasks from year section
-      deleteCompletedTasks("year", "yearly")
-      
-      // Then move incomplete tasks from year to due
-      moveIncompleteTasks("year")
-    }
-
-    // Update the last opened timestamp
-    localStorage.setItem("lastOpenedTimestamp", currentTimestamp.toString())
-    console.log("Updated last opened timestamp to:", new Date(currentTimestamp).toLocaleString())
+  function deleteTask(taskId) {
+    tasksCache[currentSection] = tasksCache[currentSection].filter(task => task.id !== taskId)
+    saveToLocalStorage()
+    renderTasks()
   }
 
-  // Delete completed tasks based on the section and time period
-  function deleteCompletedTasks(section, timePeriod) {
-    console.log(`Checking for completed ${section} tasks to delete (${timePeriod} cleanup)`)
+  function addSubtask(taskId, subtaskText) {
+    if (subtaskText.trim() === "") return
     
-    const now = new Date()
-    let timeThreshold
+    const task = findTaskById(taskId)
+    if (!task) return
     
-    // Set the appropriate time threshold based on the time period
-    switch (timePeriod) {
-      case "daily":
-        // For daily cleanup, delete tasks completed more than 24 hours ago
-        timeThreshold = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-        break
-      case "weekly":
-        // For weekly cleanup, delete tasks completed more than 7 days ago
-        timeThreshold = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-        break
-      case "monthly":
-        // For monthly cleanup, delete tasks completed more than 30 days ago
-        timeThreshold = 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
-        break
-      case "yearly":
-        // For yearly cleanup, delete tasks completed more than 365 days ago
-        timeThreshold = 365 * 24 * 60 * 60 * 1000 // 365 days in milliseconds
-        break
-      default:
-        // Default to daily cleanup
-        timeThreshold = 24 * 60 * 60 * 1000
-    }
-    
-    // Filter out completed tasks based on the time threshold
-    const tasksToKeep = tasksCache[section].filter(task => {
-      // Keep all incomplete tasks
-      if (!task.completed) return true
-      
-      // If task is completed but doesn't have completedAt timestamp, keep it
-      if (!task.completedAt) return true
-      
-      // Calculate time difference between now and when the task was completed
-      const completedAt = new Date(task.completedAt)
-      const timeDiff = now.getTime() - completedAt.getTime()
-      
-      // Keep the task if it was completed less than the threshold time ago
-      return timeDiff < timeThreshold
+    task.subtasks.push({
+      id: Date.now().toString(),
+      text: subtaskText,
+      completed: false
     })
     
-    // If we removed any tasks, update the cache and localStorage
-    if (tasksToKeep.length < tasksCache[section].length) {
-      const removedCount = tasksCache[section].length - tasksToKeep.length
-      console.log(`Removed ${removedCount} completed ${section} tasks (${timePeriod} cleanup)`)
+    saveToLocalStorage()
+    renderTasks()
+  }
+
+  function toggleSubtaskCompletion(taskId, subtaskId) {
+    const task = findTaskById(taskId)
+    if (!task) return
+    
+    const subtask = task.subtasks.find(st => st.id === subtaskId)
+    if (!subtask) return
+    
+    // Store open states
+    const openStates = storeSubtaskContainerStates()
+    
+    // Toggle completion
+    subtask.completed = !subtask.completed
+    
+    // Update task completion if all subtasks are completed
+    if (task.subtasks.length > 0) {
+      task.completed = task.subtasks.every(st => st.completed)
+      if (task.completed) task.completedAt = new Date().toISOString()
+      else delete task.completedAt
+    }
+    
+    saveToLocalStorage()
+    renderTasks()
+    
+    // Restore open states
+    restoreSubtaskContainerStates(openStates)
+  }
+
+  function deleteSubtask(taskId, subtaskId) {
+    const task = findTaskById(taskId)
+    if (!task) return
+    
+    task.subtasks = task.subtasks.filter(st => st.id !== subtaskId)
+    saveToLocalStorage()
+    renderTasks()
+  }
+
+  // ===== Time-based Operations =====
+
+  function checkMissedTaskMovements() {
+    const now = new Date()
+    const lastOpenedTimestamp = localStorage.getItem("lastOpenedTimestamp")
+    
+    // First time opening the app
+    if (!lastOpenedTimestamp) {
+      localStorage.setItem("lastOpenedTimestamp", now.getTime().toString())
+      return
+    }
+    
+    const lastOpened = new Date(parseInt(lastOpenedTimestamp))
+    const daysPassed = getDaysBetweenDates(lastOpened, now)
+    
+    // Process daily tasks
+    if (daysPassed >= 1) {
+      // Delete completed tasks first
+      deleteCompletedTasks("due", 24 * 60 * 60 * 1000)
+      deleteCompletedTasks("tomorrow", 24 * 60 * 60 * 1000)
+      deleteCompletedTasks("today", 24 * 60 * 60 * 1000)
       
-      tasksCache[section] = tasksToKeep
-      localStorage.setItem("tasks", JSON.stringify(tasksCache))
-      
-      // Re-render if we're currently viewing the affected section
-      if (currentSection === section) {
-        renderTasks()
+      // Process daily tasks
+      if (daysPassed === 1) {
+        moveIncompleteTasks("today")
+        tasksCache.today = [...tasksCache.tomorrow]
+        tasksCache.tomorrow = []
+      } else {
+        moveIncompleteTasks("today")
+        moveIncompleteTasks("tomorrow")
+        tasksCache.today = []
+        tasksCache.tomorrow = []
       }
-    } else {
-      console.log(`No completed ${section} tasks to delete (${timePeriod} cleanup)`)
+    }
+    
+    // Weekly, monthly, yearly tasks
+    if (hasCrossedMonday(lastOpened, now)) {
+      deleteCompletedTasks("week", 7 * 24 * 60 * 60 * 1000)
+      moveIncompleteTasks("week")
+    }
+    
+    if (hasCrossedMonthEnd(lastOpened, now)) {
+      deleteCompletedTasks("month", 30 * 24 * 60 * 60 * 1000)
+      moveIncompleteTasks("month")
+    }
+    
+    if (hasCrossedYearEnd(lastOpened, now)) {
+      deleteCompletedTasks("year", 365 * 24 * 60 * 60 * 1000)
+      moveIncompleteTasks("year")
+    }
+    
+    saveToLocalStorage()
+    localStorage.setItem("lastOpenedTimestamp", now.getTime().toString())
+  }
+
+  function deleteCompletedTasks(section, timeThreshold) {
+    const now = new Date()
+    
+    tasksCache[section] = tasksCache[section].filter(task => {
+      if (!task.completed) return true
+      if (!task.completedAt) return true
+      
+      const completedAt = new Date(task.completedAt)
+      return (now.getTime() - completedAt.getTime()) < timeThreshold
+    })
+    
+    if (currentSection === section) renderTasks()
+  }
+
+  function moveIncompleteTasks(section) {
+    const incompleteTasks = tasksCache[section].filter(task => !task.completed)
+    
+    if (incompleteTasks.length > 0) {
+      tasksCache.due = [...tasksCache.due, ...incompleteTasks.map(task => ({
+        ...task,
+        sourceSection: section,
+        movedToDueAt: new Date().toISOString()
+      }))]
+      
+      tasksCache[section] = tasksCache[section].filter(task => task.completed)
+      
+      if (currentSection === section || currentSection === "due") renderTasks()
     }
   }
 
-  // Process daily tasks based on days passed
-  function processDailyTasks(daysPassed) {
-    // First, move incomplete tasks from today to due
-    moveIncompleteTasks("today")
+  // ===== Helper Functions =====
 
-    // Then handle the tomorrow -> today transition
-    if (daysPassed === 1) {
-      // Simple case: just move tomorrow to today
-      overwriteTodayWithTomorrow()
-    } else if (daysPassed > 1) {
-      // If more than one day has passed, we need to:
-      // 1. Move incomplete tasks from tomorrow to due
-      moveIncompleteTasks("tomorrow")
-      // 2. Clear today (since those incomplete tasks were already moved to due)
-      tasksCache.today = []
-      // 3. Clear tomorrow (since those incomplete tasks were already moved to due)
-      tasksCache.tomorrow = []
-
-      // Save the changes
-      localStorage.setItem("tasks", JSON.stringify(tasksCache))
-      console.log("Cleared today and tomorrow tasks after multiple days absence")
-    }
+  function findTaskById(taskId) {
+    return tasksCache[currentSection].find(task => task.id === taskId)
   }
 
-  // Get the number of days between two dates
+  function saveToLocalStorage() {
+    localStorage.setItem("tasks", JSON.stringify(tasksCache))
+  }
+
+  function storeSubtaskContainerStates() {
+    const openStates = {}
+    document.querySelectorAll(".task-item").forEach(item => {
+      const taskId = item.querySelector(".task-checkbox").dataset.taskId
+      const container = item.querySelector(".subtasks-container")
+      if (container) openStates[taskId] = container.style.display === "block"
+    })
+    return openStates
+  }
+
+  function restoreSubtaskContainerStates(openStates) {
+    document.querySelectorAll(".task-item").forEach(item => {
+      const taskId = item.querySelector(".task-checkbox").dataset.taskId
+      if (openStates[taskId]) {
+        const container = item.querySelector(".subtasks-container")
+        const toggleBtn = item.querySelector(".task-toggle-subtasks")
+        if (container && toggleBtn) {
+          container.style.display = "block"
+          toggleBtn.textContent = "▲"
+        }
+      }
+    })
+  }
+
   function getDaysBetweenDates(startDate, endDate) {
-    // Convert both dates to midnight for accurate day calculation
-    const start = new Date(startDate)
+    const start = new Date(startDate), end = new Date(endDate)
     start.setHours(0, 0, 0, 0)
-
-    const end = new Date(endDate)
     end.setHours(0, 0, 0, 0)
-
-    // Calculate the difference in days
-    const diffTime = Math.abs(end - start)
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-
-    return diffDays
+    return Math.floor(Math.abs(end - start) / (1000 * 60 * 60 * 24))
   }
 
-  // Check if we've crossed a Monday between two dates
   function hasCrossedMonday(startDate, endDate) {
-    // If the dates are the same, no Monday was crossed
     if (startDate.getTime() === endDate.getTime()) return false
-
-    // If start date is Monday and end date is a different day, we crossed a Monday
     if (startDate.getDay() === 1 && startDate.getDate() !== endDate.getDate()) return true
-
-    // Clone the start date to avoid modifying the original
+    
     const currentDate = new Date(startDate)
-
-    // Move to the next day
     currentDate.setDate(currentDate.getDate() + 1)
-
-    // Check each day between start and end
+    
     while (currentDate <= endDate) {
-      // If we find a Monday, return true
-      if (currentDate.getDay() === 1) {
-        return true
-      }
-
-      // Move to the next day
+      if (currentDate.getDay() === 1) return true
       currentDate.setDate(currentDate.getDate() + 1)
     }
-
-    // No Monday found
+    
     return false
   }
 
-  // Check if we've crossed a month end between two dates
   function hasCrossedMonthEnd(startDate, endDate) {
-    // If the dates are in the same month and year, no month end was crossed
-    if (startDate.getMonth() === endDate.getMonth() && startDate.getFullYear() === endDate.getFullYear()) {
-      return false
-    }
-
-    // If the dates are in different months or years, a month end was crossed
-    return true
+    return startDate.getMonth() !== endDate.getMonth() || 
+           startDate.getFullYear() !== endDate.getFullYear()
   }
 
-  // Check if we've crossed a year end between two dates
   function hasCrossedYearEnd(startDate, endDate) {
-    // If the dates are in the same year, no year end was crossed
-    if (startDate.getFullYear() === endDate.getFullYear()) {
-      return false
-    }
-
-    // If the dates are in different years, a year end was crossed
-    return true
-  }
-
-  // Move incomplete tasks from a section to the due section
-  function moveIncompleteTasks(section) {
-    console.log(`Moving incomplete tasks from ${section} to due section`)
-
-    // Find incomplete tasks
-    const incompleteTasks = tasksCache[section].filter((task) => !task.completed)
-
-    if (incompleteTasks.length === 0) {
-      console.log(`No incomplete tasks in ${section} section`)
-      return
-    }
-
-    console.log(`Found ${incompleteTasks.length} incomplete tasks in ${section} section`)
-
-    // Create copies of the tasks with source information
-    const tasksToMove = incompleteTasks.map((task) => ({
-      ...task,
-      sourceSection: section,
-      movedToDueAt: new Date().toISOString(),
-    }))
-
-    // Add incomplete tasks to the due section
-    tasksCache.due = [...tasksCache.due, ...tasksToMove]
-
-    // Remove incomplete tasks from the original section
-    tasksCache[section] = tasksCache[section].filter((task) => task.completed)
-
-    // Save updated tasks
-    localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-    console.log(`Successfully moved tasks from ${section} to due section`)
-
-    // Re-render if we're currently viewing the affected section
-    if (currentSection === section || currentSection === "due") {
-      renderTasks()
-    }
-  }
-
-  // Overwrite today's tasks with tomorrow's tasks and clear tomorrow
-  function overwriteTodayWithTomorrow() {
-    console.log("Overwriting today's tasks with tomorrow's tasks")
-
-    // Overwrite today with tomorrow
-    tasksCache.today = [...tasksCache.tomorrow]
-
-    // Clear tomorrow
-    tasksCache.tomorrow = []
-
-    // Save updated tasks
-    localStorage.setItem("tasks", JSON.stringify(tasksCache))
-
-    console.log("Today's tasks updated with tomorrow's tasks")
-
-    // Re-render if we're currently viewing today or tomorrow
-    if (currentSection === "today" || currentSection === "tomorrow") {
-      renderTasks()
-    }
+    return startDate.getFullYear() !== endDate.getFullYear()
   }
 })
