@@ -20,6 +20,10 @@
     <link rel="shortcut icon" href="/favicon.ico">
     
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="script.js" as="script">
+    <link rel="preload" href="pwa.js" as="script">
 </head>
 <body>
     <div class="container">
@@ -61,7 +65,69 @@
         <div id="offlineIndicator" class="offline-indicator" style="display: none;">
             You are currently offline. Changes will be saved locally.
         </div>
+        
+        <div id="debugInfo" class="debug-info" style="display: none;">
+            <button id="checkCacheBtn">Check Cache</button>
+            <button id="clearCacheBtn">Clear Cache</button>
+            <button id="reloadSWBtn">Reload Service Worker</button>
+            <pre id="debugOutput"></pre>
+        </div>
     </div>
+    
+    <script>
+        // Inline script to handle immediate offline detection
+        // This runs before external scripts load
+        if (!navigator.onLine) {
+            document.getElementById('offlineIndicator').style.display = 'block';
+        }
+        
+        // Debug tools (remove in production)
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add debug mode toggle with keyboard shortcut (Ctrl+Shift+D)
+            let debugMode = false;
+            const debugInfo = document.getElementById('debugInfo');
+            
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                    debugMode = !debugMode;
+                    debugInfo.style.display = debugMode ? 'block' : 'none';
+                }
+            });
+            
+            // Debug buttons
+            document.getElementById('checkCacheBtn').addEventListener('click', function() {
+                window.checkCacheStatus().then(result => {
+                    document.getElementById('debugOutput').textContent = 'Check browser console for cache details';
+                });
+            });
+            
+            document.getElementById('clearCacheBtn').addEventListener('click', function() {
+                if ('caches' in window) {
+                    caches.keys().then(cacheNames => {
+                        return Promise.all(
+                            cacheNames.map(cacheName => {
+                                return caches.delete(cacheName);
+                            })
+                        );
+                    }).then(() => {
+                        document.getElementById('debugOutput').textContent = 'All caches cleared';
+                    });
+                }
+            });
+            
+            document.getElementById('reloadSWBtn').addEventListener('click', function() {
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(registrations => {
+                        for (let registration of registrations) {
+                            registration.unregister();
+                        }
+                        window.location.reload();
+                        document.getElementById('debugOutput').textContent = 'Service Worker unregistered, reloading...';
+                    });
+                }
+            });
+        });
+    </script>
     
     <script src="script.js"></script>
     <script src="pwa.js"></script>

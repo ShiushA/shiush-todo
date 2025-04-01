@@ -1,6 +1,5 @@
-const CACHE_NAME = "shiush-todo-v3"
-const OFFLINE_PAGE = "/offline.html"
-const urlsToCache = [
+const CACHE_NAME = "shiush-todo-v4"
+const APP_SHELL = [
   "/",
   "/index.html",
   "/style.css",
@@ -15,120 +14,139 @@ const urlsToCache = [
   "/icon/apple-touch-icon.png",
   "/screenshots/Mobiless.png",
   "/screenshots/Pcss.png",
-  OFFLINE_PAGE,
 ]
 
-// Install the service worker and cache assets
+// Install event - cache all app shell assets
 self.addEventListener("install", (event) => {
+  console.log("[ServiceWorker] Install")
   event.waitUntil(
     caches
       .open(CACHE_NAME)
       .then((cache) => {
-        console.log("Opened cache")
-        return cache.addAll(urlsToCache)
+        console.log("[ServiceWorker] Caching app shell")
+        return cache.addAll(APP_SHELL)
       })
       .then(() => {
-        // Force the waiting service worker to become the active service worker
+        console.log("[ServiceWorker] Skip waiting")
         return self.skipWaiting()
       }),
   )
 })
 
-// Activate the service worker and clean up old caches
+// Activate event - clean up old caches
 self.addEventListener("activate", (event) => {
-  const cacheWhitelist = [CACHE_NAME]
+  console.log("[ServiceWorker] Activate")
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) => {
+      .then((keyList) => {
         return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheWhitelist.indexOf(cacheName) === -1) {
-              return caches.delete(cacheName)
+          keyList.map((key) => {
+            if (key !== CACHE_NAME) {
+              console.log("[ServiceWorker] Removing old cache", key)
+              return caches.delete(key)
             }
           }),
         )
       })
       .then(() => {
-        // Take control of all clients as soon as it activates
+        console.log("[ServiceWorker] Claiming clients")
         return self.clients.claim()
       }),
   )
 })
 
-// Improved fetch event handler with network-first strategy for API requests
-// and cache-first strategy for static assets
+// Fetch event - serve from cache first, then network
 self.addEventListener("fetch", (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
-    return
-  }
+  console.log("[ServiceWorker] Fetch", event.request.url)
 
-  // Clone the request to avoid consuming it
-  const requestClone = event.request.clone()
+  // For navigation requests (HTML pages)
+  if (
+    event.request.mode === "navigate" ||
+    (event.request.method === "GET" && event.request.headers.get("accept").includes("text/html"))
+  ) {
+    console.log("[ServiceWorker] HTML request", event.request.url)
 
-  event.respondWith(
-    // Try the network first
-    fetch(requestClone)
-      .then((response) => {
-        // If we got a valid response, clone it and put it in the cache
-        if (response && response.status === 200) {
-          const responseToCache = response.clone()
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Cache the latest version
+          const responseClone = response.clone()
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache)
+            cache.put(event.request, responseClone)
           })
-        }
-        return response
-      })
-      .catch(() => {
-        // If network fails, try to serve from cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse
-          }
-
-          // If the request is for a page (HTML), show the offline page
-          if (event.request.mode === "navigate") {
-            return caches.match(OFFLINE_PAGE)
-          }
-
-          // For other resources, just fail
-          return new Response("Not found", {
-            status: 404,
-            statusText: "Not found",
-          })
+          return response
         })
-      }),
-  )
-})
+        .catch(() => {
+          // If offline, try to return cached HTML
+          return caches.match(event.request).then((response) => {
+            return response || caches.match("/index.html")
+          })
+        }),
+    )
+  } else {
+    // For non-HTML requests (assets, API calls)
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        // Cache hit - return the response
+        if (response) {
+          return response
+        }
 
-// Handle offline sync when coming back online
-self.addEventListener("sync", (event) => {
-  if (event.tag === "sync-tasks") {
-    event.waitUntil(syncTasks())
+        // Clone the request
+        const fetchRequest = event.request.clone()
+
+        return fetch(fetchRequest)
+          .then((response) => {
+            // Check if valid response
+            if (!response || response.status !== 200 || response.type !== "basic") {
+              return response
+            }
+
+            // Clone the response
+            const responseToCache = response.clone()
+
+            // Cache the new resource
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache)
+            })
+
+            return response
+          })
+          .catch((error) => {
+            console.error("[ServiceWorker] Fetch failed:", error)
+            // You could return a custom offline asset here if needed
+            // For example: return caches.match('/offline-image.png');
+            throw error
+          })
+      }),
+    )
   }
 })
 
-// Function to sync tasks when coming back online
-async function syncTasks() {
-  // This would typically sync with a server
-  // For this local storage app, we'll just log that sync would happen here
-  console.log("Would sync tasks with server if this was connected to a backend")
-
-  // Notify any open clients that we're back online
-  const clients = await self.clients.matchAll({ type: "window" })
-  clients.forEach((client) => {
-    client.postMessage({
-      type: "ONLINE_STATUS_CHANGE",
-      payload: { isOnline: true },
-    })
-  })
-}
-
-// Listen for messages from the main thread
+// Handle messages from clients
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting()
+  }
+})
+
+// Background sync for when coming back online
+self.addEventListener("sync", (event) => {
+  if (event.tag === "sync-tasks") {
+    event.waitUntil(
+      // This would sync with a server in a real app
+      self.clients
+        .matchAll()
+        .then((clients) => {
+          clients.forEach((client) => {
+            client.postMessage({
+              type: "ONLINE_STATUS_CHANGE",
+              payload: { isOnline: true },
+            })
+          })
+        }),
+    )
   }
 })
 

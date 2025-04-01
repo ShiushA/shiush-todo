@@ -730,12 +730,13 @@ input[type="radio"]:checked + .priority-label.minor {
   background: rgba(239, 68, 68, 0.9);
   color: white;
   padding: 10px 20px;
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   font-weight: 500;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 1000;
   text-align: center;
   animation: fadeIn 0.3s ease;
+  max-width: 90%;
 }
 
 @keyframes fadeIn {
@@ -747,6 +748,41 @@ input[type="radio"]:checked + .priority-label.minor {
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+/* Debug panel (hidden by default) */
+.debug-info {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.8);
+  color: #00ff00;
+  padding: 10px;
+  font-family: monospace;
+  z-index: 9999;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.debug-info button {
+  background: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 5px 10px;
+  margin-right: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.debug-info button:hover {
+  background: #444;
+}
+
+.debug-info pre {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* Responsive Design */
@@ -793,6 +829,8 @@ input[type="radio"]:checked + .priority-label.minor {
   }
   .offline-indicator {
     width: 90%;
+    padding: 8px 15px;
+    font-size: 0.9rem;
   }
 }
 
