@@ -5,11 +5,14 @@ const urlsToCache = [
   "/style.css",
   "/script.js",
   "/manifest.json",
-  "/icons/favicon.png",
-  "/icons/apple-touch-icon.png",
-  "/icons/favicon-96x96.png",
-  "/icons/web-app-manifest-192x192.png",
-  "/icons/web-app-manifest-512x512.png",
+  "/favicon.ico",
+  "/favicon.svg",
+  "/favicon-96x96.png",
+  "/web-app-manifest-192x192.png",
+  "/web-app-manifest-512x512.png",
+  "/apple-touch-icon.png",
+  "/screenshots/mobile.png",
+  "/screenshots/desktop.png",
 ]
 
 // Install the service worker and cache assets
