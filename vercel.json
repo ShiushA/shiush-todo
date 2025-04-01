@@ -1,0 +1,26 @@
+{
+    "version": 2,
+    "routes": [
+      {
+        "src": "^/service-worker.js$",
+        "headers": {
+          "cache-control": "public, max-age=0, must-revalidate"
+        }
+      },
+      {
+        "src": "^/manifest.json$",
+        "headers": {
+          "cache-control": "public, max-age=0, must-revalidate"
+        }
+      },
+      {
+        "handle": "filesystem"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/index.html"
+      }
+    ]
+  }
+  
+  
