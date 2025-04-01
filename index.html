@@ -15,8 +15,8 @@
     <!-- Favicon and PWA Icons -->
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="/icon/favicon-96x96.png" sizes="96x96">
+    <link rel="apple-touch-icon" href="/icon/apple-touch-icon.png">
     <link rel="shortcut icon" href="/favicon.ico">
     
     <link rel="stylesheet" href="style.css">
@@ -56,6 +56,10 @@
         <div class="tasks-container">
             <h2 id="currentSection">Today</h2>
             <div id="tasksList"></div>
+        </div>
+        
+        <div id="offlineIndicator" class="offline-indicator" style="display: none;">
+            You are currently offline. Changes will be saved locally.
         </div>
     </div>
     
