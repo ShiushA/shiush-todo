@@ -1,7 +1,7 @@
 # Project-001
 To Do list <br>
 First project <br>
-https://shiush001.vercel.app/<br>
+https://shiush-todo.vercel.app/<br>
 Features of To Do List:<br>
     Can assign a task as main, sub or minor task<br>
     Has a Subtask feature for each task<br>
